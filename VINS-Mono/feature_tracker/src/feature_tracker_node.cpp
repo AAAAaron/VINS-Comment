@@ -53,7 +53,9 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
     
     //不是第一帧，且时间正常的情况下，首先刷新系统的时间
     last_image_time = img_msg->header.stamp.toSec();
-    // frequency control
+    // frequency control 频率控制
+    //如果当前时间与第一帧之间形成的频率小于预定频率，就使用这帧照片
+    //如果当前时间与第一帧之间形成的时间差小于频率的十分之一，就认为需要重新开始了
     if (round(1.0 * pub_count / (img_msg->header.stamp.toSec() - first_image_time)) <= FREQ)
     {
         PUB_THIS_FRAME = true;
@@ -67,6 +69,7 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
     else
         PUB_THIS_FRAME = false;
 
+    //创建图片对象
     cv_bridge::CvImageConstPtr ptr;
     if (img_msg->encoding == "8UC1")
     {
@@ -83,12 +86,15 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
     else
         ptr = cv_bridge::toCvCopy(img_msg, sensor_msgs::image_encodings::MONO8);
 
+    
     cv::Mat show_img = ptr->image;
     TicToc t_r;
     for (int i = 0; i < NUM_OF_CAM; i++)
     {
         ROS_DEBUG("processing camera %d", i);
         if (i != 1 || !STEREO_TRACK)
+	  //处理数据，处理给出的照片数据
+
             trackerData[i].readImage(ptr->image.rowRange(ROW * i, ROW * (i + 1)), img_msg->header.stamp.toSec());
         else
         {
@@ -100,7 +106,7 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
             else
                 trackerData[i].cur_img = ptr->image.rowRange(ROW * i, ROW * (i + 1));
         }
-
+// 是否显示畸变
 #if SHOW_UNDISTORTION
         trackerData[i].showUndistortion("undistrotion_" + std::to_string(i));
 #endif
@@ -118,6 +124,7 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
 
    if (PUB_THIS_FRAME)
    {
+     //sensor_msgs是哪里定义的？
         pub_count++;
         sensor_msgs::PointCloudPtr feature_points(new sensor_msgs::PointCloud);
         sensor_msgs::ChannelFloat32 id_of_point;
@@ -127,7 +134,7 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
         sensor_msgs::ChannelFloat32 velocity_y_of_point;
 
         feature_points->header = img_msg->header;
-        feature_points->header.frame_id = "world";
+        feature_points->header.frame_id = "world";//是第一帧定义为世界坐标系
 
         vector<set<int>> hash_ids(NUM_OF_CAM);
         for (int i = 0; i < NUM_OF_CAM; i++)
