@@ -121,6 +121,9 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
         if (!completed)
             break;
     }
+// 将特征点矫正（相机模型camodocal）后归一化平面的3D点（此时没有尺度信息，3D点p.z=1）
+// ，像素2D点，以及特征的id，封装成ros的sensor_msgs::PointCloud消息类型的feature_points实例中；
+// 将图像封装到cv_bridge::CvImageConstPtr类型的ptr实例中
 
    if (PUB_THIS_FRAME)
    {
