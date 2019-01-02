@@ -10,10 +10,11 @@ using namespace Eigen;
 
 #include <ros/console.h>
 
+//运动估计的类
 class MotionEstimator
 {
   public:
-
+    //根据角点，求解相对旋转和位移
     bool solveRelativeRT(const vector<pair<Vector3d, Vector3d>> &corres, Matrix3d &R, Vector3d &T);
 
   private:

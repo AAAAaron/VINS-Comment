@@ -1009,7 +1009,10 @@ void Estimator::slideWindow()
     if (marginalization_flag == MARGIN_OLD)
     {
         double t_0 = Headers[0].stamp.toSec();
+<<<<<<< HEAD
 
+=======
+>>>>>>> 84846e058b86128747d40f8a2ed5c726845b9275
         back_R0 = Rs[0];
         back_P0 = Ps[0];
         if (frame_count == WINDOW_SIZE)
@@ -1046,12 +1049,28 @@ void Estimator::slideWindow()
 
             if (true || solver_flag == INITIAL)
             {
+<<<<<<< HEAD
                 // double t_0 = Headers[0].stamp.toSec();
+=======
+>>>>>>> 84846e058b86128747d40f8a2ed5c726845b9275
                 map<double, ImageFrame>::iterator it_0;
                 it_0 = all_image_frame.find(t_0);
 
                 delete it_0->second.pre_integration;
                 it_0->second.pre_integration = nullptr;
+<<<<<<< HEAD
+=======
+ 
+                for (map<double, ImageFrame>::iterator it = all_image_frame.begin(); it != it_0; ++it)
+                {
+                    if (it->second.pre_integration)
+                        delete it->second.pre_integration;
+                    it->second.pre_integration = NULL;
+                }
+
+                all_image_frame.erase(all_image_frame.begin(), it_0);
+                all_image_frame.erase(t_0);
+>>>>>>> 84846e058b86128747d40f8a2ed5c726845b9275
 
                 for (map<double, ImageFrame>::iterator it = all_image_frame.begin(); it != it_0; ++it)
                 {

@@ -22,7 +22,7 @@
 #include <queue>
 #include <opencv2/core/eigen.hpp>
 
-
+//主要估计类
 class Estimator
 {
   public:
