@@ -94,7 +94,7 @@ void update()
         predict(tmp_imu_buf.front());
 
 }
-
+// 获取buf里的数据
 std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr>>
 getMeasurements()
 {
@@ -134,7 +134,7 @@ getMeasurements()
     }
     return measurements;
 }
-
+// 接收和保存IMU数据
 void imu_callback(const sensor_msgs::ImuConstPtr &imu_msg)
 {
     if (imu_msg->header.stamp.toSec() <= last_imu_t)
@@ -144,8 +144,8 @@ void imu_callback(const sensor_msgs::ImuConstPtr &imu_msg)
     }
     last_imu_t = imu_msg->header.stamp.toSec();
 
-    m_buf.lock();
-    imu_buf.push(imu_msg);
+    m_buf.lock();//同步锁
+    imu_buf.push(imu_msg);//发布数据到imu里面去
     m_buf.unlock();
     con.notify_one();
 
@@ -161,7 +161,7 @@ void imu_callback(const sensor_msgs::ImuConstPtr &imu_msg)
     }
 }
 
-
+// 图像特征数据和原始图像数据
 void feature_callback(const sensor_msgs::PointCloudConstPtr &feature_msg)
 {
     if (!init_feature)
@@ -196,7 +196,7 @@ void restart_callback(const std_msgs::BoolConstPtr &restart_msg)
     }
     return;
 }
-
+//基于点云的重定位
 void relocalization_callback(const sensor_msgs::PointCloudConstPtr &points_msg)
 {
     //printf("relocalization callback! \n");
@@ -206,10 +206,12 @@ void relocalization_callback(const sensor_msgs::PointCloudConstPtr &points_msg)
 }
 
 // thread: visual-inertial odometry
+//回调函数接收数据，接收完一组数据唤醒提取数据的线程，提取数据的线程提取完数据后，回调函数就可以继续接收数据，依次往复。这就是线程间通信的曼妙啊！
 void process()
 {
     while (true)
     {
+        //一对包含了多个imu信息和点云信息组合的数据组
         std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr>> measurements;
         std::unique_lock<std::mutex> lk(m_buf);
         con.wait(lk, [&]
@@ -218,6 +220,8 @@ void process()
                  });
         lk.unlock();
         m_estimator.lock();
+        //分析测量
+        // 步骤1调用imu的预积分，调用push_back函数，函数中将时间，加速度和角速度分别存入相应的缓存中，同时调用了propagation函数 ,计算对应的状态量、协方差和雅可比矩阵
         for (auto &measurement : measurements)
         {
             auto img_msg = measurement.second;
@@ -239,6 +243,7 @@ void process()
                     rx = imu_msg->angular_velocity.x;
                     ry = imu_msg->angular_velocity.y;
                     rz = imu_msg->angular_velocity.z;
+                    //优化器调用该方法
                     estimator.processIMU(dt, Vector3d(dx, dy, dz), Vector3d(rx, ry, rz));
                     //printf("imu: dt:%f a: %f %f %f w: %f %f %f\n",dt, dx, dy, dz, rx, ry, rz);
 
@@ -311,6 +316,7 @@ void process()
                 xyz_uv_velocity << x, y, z, p_u, p_v, velocity_x, velocity_y;
                 image[feature_id].emplace_back(camera_id,  xyz_uv_velocity);
             }
+            // 这里进来的数据不是图像数据哦，而是前面已经跟踪匹配好的归一化平面坐标。将当前帧的特征存放在image中，image的第一个元素类型是特征点的编号，第二个元素是相机编号，第三个是特征点坐标，然后直接进入到处理图像特征数据的线程中
             estimator.processImage(image, img_msg->header);
 
             double whole_t = t_s.toc();
@@ -357,7 +363,7 @@ int main(int argc, char **argv)
     ros::Subscriber sub_restart = n.subscribe("/feature_tracker/restart", 2000, restart_callback);
     ros::Subscriber sub_relo_points = n.subscribe("/pose_graph/match_points", 2000, relocalization_callback);
 
-    std::thread measurement_process{process};
+    std::thread measurement_process{process};//启动进程
     ros::spin();
 
     return 0;

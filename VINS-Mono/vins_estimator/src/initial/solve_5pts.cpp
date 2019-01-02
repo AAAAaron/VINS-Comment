@@ -7,7 +7,6 @@ namespace cv {
 
         Mat E = _E.getMat().reshape(1, 3);
         CV_Assert(E.cols == 3 && E.rows == 3);
-
         Mat D, U, Vt;
         SVD::compute(E, D, U, Vt);
 
