@@ -18,7 +18,7 @@ void GlobalSFM::triangulatePoint(Eigen::Matrix<double, 3, 4> &Pose0, Eigen::Matr
 	point_3d(2) = triangulated_point(2) / triangulated_point(3);
 }
 
-
+//调用pnp求解
 bool GlobalSFM::solveFrameByPnP(Matrix3d &R_initial, Vector3d &P_initial, int i,
 								vector<SFMFeature> &sfm_f)
 {
@@ -71,6 +71,7 @@ bool GlobalSFM::solveFrameByPnP(Matrix3d &R_initial, Vector3d &P_initial, int i,
 
 }
 
+//找到两帧之间的共视点
 void GlobalSFM::triangulateTwoFrames(int frame0, Eigen::Matrix<double, 3, 4> &Pose0, 
 									 int frame1, Eigen::Matrix<double, 3, 4> &Pose1,
 									 vector<SFMFeature> &sfm_f)
@@ -96,6 +97,7 @@ void GlobalSFM::triangulateTwoFrames(int frame0, Eigen::Matrix<double, 3, 4> &Po
 				has_1 = true;
 			}
 		}
+		//在所有的点中，这两帧之间存在共视点
 		if (has_0 && has_1)
 		{
 			Vector3d point_3d;
@@ -114,6 +116,14 @@ void GlobalSFM::triangulateTwoFrames(int frame0, Eigen::Matrix<double, 3, 4> &Po
 //  c_translation cam_R_w
 // relative_q[i][j]  j_q_i
 // relative_t[i][j]  j_t_ji  (j < i)
+/**
+ * @description: //构建sfm问题，输入帧数量，窗内各帧之间预置的四元素数组，平移数组//选择的帧号，选择的帧和最后一帧之间的相对旋转，sfm特征，特征点图
+ * @param {type} 
+ * sfm_f:
+ * sfm_tracked_points:
+ * @return: 
+ */
+
 bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 			  const Matrix3d relative_R, const Vector3d relative_T,
 			  vector<SFMFeature> &sfm_f, map<int, Vector3d> &sfm_tracked_points)
@@ -122,6 +132,7 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 	//cout << "set 0 and " << l << " as known " << endl;
 	// have relative_r relative_t
 	// intial two view
+	//确定最后一帧的相对值
 	q[l].w() = 1;
 	q[l].x() = 0;
 	q[l].y() = 0;
@@ -157,7 +168,7 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 	//2: solve pnp l + 1; trangulate l + 1 ------- frame_num - 1; 
 	for (int i = l; i < frame_num - 1 ; i++)
 	{
-		// solve pnp
+		// solve pnp跳过前面那些不用的帧
 		if (i > l)
 		{
 			Matrix3d R_initial = c_Rotation[i - 1];
@@ -172,6 +183,8 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 		}
 
 		// triangulate point based on the solve pnp result
+		//前面条件不满足，就是首先进来当i=l时第i帧和最后一帧之间的三角化，得到了这两帧之间的共视点
+		//然后重复进行从i+1帧到最后一帧之间的三角化
 		triangulateTwoFrames(i, Pose[i], frame_num - 1, Pose[frame_num - 1], sfm_f);
 	}
 	//3: triangulate l-----l+1 l+2 ... frame_num -2

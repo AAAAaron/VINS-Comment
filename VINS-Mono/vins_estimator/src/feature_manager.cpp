@@ -117,6 +117,7 @@ void FeatureManager::debugShow()
     }
 }
 
+//获得corres焦点
 vector<pair<Vector3d, Vector3d>> FeatureManager::getCorresponding(int frame_count_l, int frame_count_r)
 {
     vector<pair<Vector3d, Vector3d>> corres;

@@ -122,6 +122,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
 {
     ROS_DEBUG("new image coming ------------------------------------------");
     ROS_DEBUG("Adding feature points %lu", image.size());
+    // 首先对进来的图像特征数据根据视差判断是否是关键帧，选择丢弃当前帧（但保留IMU数据）或者丢弃滑动窗口中最老的一帧
     if (f_manager.addFeatureCheckParallax(frame_count, image, td))
         marginalization_flag = MARGIN_OLD;
     else
@@ -132,12 +133,12 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
     ROS_DEBUG("Solving %d", frame_count);
     ROS_DEBUG("number of feature: %d", f_manager.getFeatureCount());
     Headers[frame_count] = header;
-
+// 步骤1：将图像数据和时间存到图像帧类中：首先将数据和时间保存到图像帧的对象imageframe中（ImageFrame对象中包含特征点，时间，位姿R，t，预积分对象pre_integration，是否是关键帧）,同时将临时的预积分值保存到此对象中（这里的临时预积分初值就是在前面IMU预积分的时候计算的），然后将图像帧的对象imageframe保存到all_image_frame对象中（imageframe的容器），更新临时预积分初始值。
     ImageFrame imageframe(image, header.stamp.toSec());
     imageframe.pre_integration = tmp_pre_integration;
     all_image_frame.insert(make_pair(header.stamp.toSec(), imageframe));
     tmp_pre_integration = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count]};
-
+    // 标定相机和IMU的外参数：接着如果没有外部参数就标定外部参数，参数传递有的话就跳过这一步（默认有，如果是自己的设备，可以设置为2对外参进行在线标定）
     if(ESTIMATE_EXTRINSIC == 2)
     {
         ROS_INFO("calibrating extrinsic param, rotation movement is needed");
@@ -155,6 +156,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
             }
         }
     }
+// 初始化系统同时进行BA优化：当求解器处于可初始化状态时（初始状态是可初始化，初始化成功就设置为不可初始化状态），判断当前frame_count是否达到WINDOW_SIZE，确保有足够的frame参与初始化，这里的frame_count是滑动窗口中图像帧的数量，一开始被初始化为0，滑动窗口总帧数是10。有外部参数同时当前帧时间戳大于初始化时间戳0.1秒，就进行初始化操作
 
     if (solver_flag == INITIAL)
     {
@@ -216,10 +218,13 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         last_P0 = Ps[0];
     }
 }
+// initialStructure()系统初始化，首先初始化Vision-only SFM，然后初始化Visual-Inertial Alignment，构成整个初始化过程。
 bool Estimator::initialStructure()
 {
     TicToc t_sfm;
     //check imu observibility
+    // 保证IMU充分运动，通过线加速度判断，一开始通过线加速度的标准差（离散程度）判断保证IMU充分运动，加速度标准差大于0 .25则代表imu充分激励，足够初始化
+
     {
         map<double, ImageFrame>::iterator frame_it;
         Vector3d sum_g;
@@ -248,10 +253,11 @@ bool Estimator::initialStructure()
         }
     }
     // global sfm
+    // 纯视觉初始化，对SlidingWindow中的图像帧和相机姿态求解sfm问题，这里解决的是关键帧的位姿和特征点坐标
     Quaterniond Q[frame_count + 1];
     Vector3d T[frame_count + 1];
     map<int, Vector3d> sfm_tracked_points;
-    vector<SFMFeature> sfm_f;
+    vector<SFMFeature> sfm_f;//共视点的集合
     for (auto &it_per_id : f_manager.feature)
     {
         int imu_j = it_per_id.start_frame - 1;
@@ -269,12 +275,14 @@ bool Estimator::initialStructure()
     Matrix3d relative_R;
     Vector3d relative_T;
     int l;
+    // 接着由对极约束中的F矩阵恢复出R、t，主要调用方法relativePose(relative_R, relative_T, l)。relativePose
     if (!relativePose(relative_R, relative_T, l))
     {
         ROS_INFO("Not enough features or parallax; Move device around");
         return false;
     }
     GlobalSFM sfm;
+    //l帧就是前面确定的第一帧
     if(!sfm.construct(frame_count + 1, Q, T, l,
               relative_R, relative_T,
               sfm_f, sfm_tracked_points))
@@ -442,11 +450,14 @@ bool Estimator::visualInitialAlign()
 
 bool Estimator::relativePose(Matrix3d &relative_R, Vector3d &relative_T, int &l)
 {
+    //corres考察视差
     // find previous frame which contians enough correspondance and parallex with newest frame
     for (int i = 0; i < WINDOW_SIZE; i++)
     {
         vector<pair<Vector3d, Vector3d>> corres;
         corres = f_manager.getCorresponding(i, WINDOW_SIZE);
+        //判断窗口内所有的帧和最后的帧之间的交点个数
+        //判断交点个数，要求大于20个
         if (corres.size() > 20)
         {
             double sum_parallax = 0;
@@ -460,6 +471,8 @@ bool Estimator::relativePose(Matrix3d &relative_R, Vector3d &relative_T, int &l)
 
             }
             average_parallax = 1.0 * sum_parallax / int(corres.size());
+            //满足特征点之间的平均距离要符合一个要求，然后使用5点法求解RT
+            //这里求出的是基于第i帧的位姿
             if(average_parallax * 460 > 30 && m_estimator.solveRelativeRT(corres, relative_R, relative_T))
             {
                 l = i;

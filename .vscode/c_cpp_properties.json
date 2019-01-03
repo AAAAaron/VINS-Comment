@@ -3,6 +3,8 @@
         {
             "name": "Win32",
             "includePath": [
+                "/usr/include",
+                "/usr/local/include",
                 "${workspaceFolder}/**"
             ],
             "defines": [
