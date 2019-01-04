@@ -1,7 +1,7 @@
 #include "initial_sfm.h"
 
 GlobalSFM::GlobalSFM(){}
-
+//根据pose0,1的，得出3d点，三角化，但是不知道为啥这个地方的值是这么算的，不是用的cv
 void GlobalSFM::triangulatePoint(Eigen::Matrix<double, 3, 4> &Pose0, Eigen::Matrix<double, 3, 4> &Pose1,
 						Vector2d &point0, Vector2d &point1, Vector3d &point_3d)
 {
@@ -50,10 +50,20 @@ bool GlobalSFM::solveFrameByPnP(Matrix3d &R_initial, Vector3d &P_initial, int i,
 	}
 	cv::Mat r, rvec, t, D, tmp_r;
 	cv::eigen2cv(R_initial, tmp_r);
+
+
+// int  cvRodrigues2cvRodr ( const CvMat* src, CvMat* dst, CvMat* jacobian=0 );
+//      src为输入的旋转向量（3x1或者1x3）或者旋转矩阵（3x3）。
+//      dst为输出的旋转矩阵（3x3）或者旋转向量（3x1或者1x3）。
+//      jacobian为可选的输出雅可比矩阵（3x9或者9x3），是输入与输出数组的偏导数。
+
+
+
 	cv::Rodrigues(tmp_r, rvec);
 	cv::eigen2cv(P_initial, t);
 	cv::Mat K = (cv::Mat_<double>(3, 3) << 1, 0, 0, 0, 1, 0, 0, 0, 1);
 	bool pnp_succ;
+	//K在这里内参默认是I都可以吗？？
 	pnp_succ = cv::solvePnP(pts_3_vector, pts_2_vector, K, D, rvec, t, 1);
 	if(!pnp_succ)
 	{
@@ -133,6 +143,7 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 	// have relative_r relative_t
 	// intial two view
 	//确定最后一帧的相对值
+	//设置初始值，ql是确定的帧的，t【-1】当然是给出计算的那个部分，以l帧作为起点0
 	q[l].w() = 1;
 	q[l].x() = 0;
 	q[l].y() = 0;
@@ -144,15 +155,16 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 	//cout << "init t_l " << T[l].transpose() << endl;
 
 	//rotate to cam frame
+	//为啥要定义两个部分的RT
 	Matrix3d c_Rotation[frame_num];
 	Vector3d c_Translation[frame_num];
 	Quaterniond c_Quat[frame_num];
 	double c_rotation[frame_num][4];
 	double c_translation[frame_num][3];
-	Eigen::Matrix<double, 3, 4> Pose[frame_num];
+	Eigen::Matrix<double, 3, 4> Pose[frame_num];//位姿用于三角化
 
 	c_Quat[l] = q[l].inverse();
-	c_Rotation[l] = c_Quat[l].toRotationMatrix();
+	c_Rotation[l] = c_Quat[l].toRotationMatrix();//最后一帧当然是算出来的那个
 	c_Translation[l] = -1 * (c_Rotation[l] * T[l]);
 	Pose[l].block<3, 3>(0, 0) = c_Rotation[l];
 	Pose[l].block<3, 1>(0, 3) = c_Translation[l];
@@ -171,6 +183,7 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 		// solve pnp跳过前面那些不用的帧
 		if (i > l)
 		{
+			//就是用上一帧的作为初值去求解pnp
 			Matrix3d R_initial = c_Rotation[i - 1];
 			Vector3d P_initial = c_Translation[i - 1];
 			if(!solveFrameByPnP(R_initial, P_initial, i, sfm_f))
@@ -184,14 +197,19 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 
 		// triangulate point based on the solve pnp result
 		//前面条件不满足，就是首先进来当i=l时第i帧和最后一帧之间的三角化，得到了这两帧之间的共视点
-		//然后重复进行从i+1帧到最后一帧之间的三角化
+		//然后重复进行从i+1帧到最后一帧之间的三角化，sfm里对应的部分的位姿
+		//经过这一步，可以在一开始定义的那些在l和最后一帧之间的共视点上加上深度
 		triangulateTwoFrames(i, Pose[i], frame_num - 1, Pose[frame_num - 1], sfm_f);
 	}
 	//3: triangulate l-----l+1 l+2 ... frame_num -2
+	//分别三角化已知的第一帧l帧和上面计算出来所有帧的每一帧的点，找到共视点，并记录点的深度
+	//三角化所有窗口后部分的帧和地l帧
 	for (int i = l + 1; i < frame_num - 1; i++)
 		triangulateTwoFrames(l, Pose[l], i, Pose[i], sfm_f);
 	//4: solve pnp l-1; triangulate l-1 ----- l
 	//             l-2              l-2 ----- l
+	//三角化所有窗口后部分的帧和地l帧
+	//l帧已经被认定为0了，那么其他帧自然就是和他确定
 	for (int i = l - 1; i >= 0; i--)
 	{
 		//solve pnp
@@ -243,6 +261,7 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 	}
 */
 	//full BA
+	//全优化方式
 	ceres::Problem problem;
 	ceres::LocalParameterization* local_parameterization = new ceres::QuaternionParameterization();
 	//cout << " begin full BA " << endl;

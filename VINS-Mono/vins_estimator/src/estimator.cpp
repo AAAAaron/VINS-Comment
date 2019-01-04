@@ -369,7 +369,7 @@ bool Estimator::initialStructure()
     }
 
 }
-
+//联合初始化
 bool Estimator::visualInitialAlign()
 {
     TicToc t_g;
@@ -381,7 +381,7 @@ bool Estimator::visualInitialAlign()
         ROS_DEBUG("solve g failed!");
         return false;
     }
-
+//计算陀螺仪偏置
     // change state
     for (int i = 0; i <= frame_count; i++)
     {
@@ -405,6 +405,7 @@ bool Estimator::visualInitialAlign()
     f_manager.setRic(ric);
     f_manager.triangulate(Ps, &(TIC_TMP[0]), &(RIC[0]));
 
+//重新计算预积分
     double s = (x.tail<1>())(0);
     for (int i = 0; i <= WINDOW_SIZE; i++)
     {
@@ -429,6 +430,8 @@ bool Estimator::visualInitialAlign()
             continue;
         it_per_id.estimated_depth *= s;
     }
+
+// 将所有的状态量由相机坐标C0转换到世界坐标W下，这里世界坐标系的定义是根据重力加速度的方向和初始相机C0坐标系的方向定义的R0 = Utility::ypr2R(Eigen::Vector3d{-yaw, 0, 0}) * R0; 定义的rot_diff就是坐标旋转矩阵q_wc0。最后将Ps[i]、Rs[i]和Vs[i]由相机C0坐标系旋转到定义的世界坐标下，这里需要说明，一般的SLAM系统世界坐标系即是C0坐标系，这里自定义了一个世界坐标系，那么最后得到的结果都是以这个世界坐标系为参考，如果想要和真值进行比较就需要注意坐标系问题了。
 
     Matrix3d R0 = Utility::g2R(g);
     double yaw = Utility::R2ypr(R0 * Rs[0]).x();
@@ -483,7 +486,7 @@ bool Estimator::relativePose(Matrix3d &relative_R, Vector3d &relative_T, int &l)
     }
     return false;
 }
-
+// solveOdometry进行BA优化
 void Estimator::solveOdometry()
 {
     if (frame_count < WINDOW_SIZE)
@@ -680,7 +683,7 @@ bool Estimator::failureDetection()
     return false;
 }
 
-
+//BA优化方法
 void Estimator::optimization()
 {
     ceres::Problem problem;
