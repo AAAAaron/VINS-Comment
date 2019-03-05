@@ -11,6 +11,7 @@ bool inBorder(const cv::Point2f &pt)
     return BORDER_SIZE <= img_x && img_x < COL - BORDER_SIZE && BORDER_SIZE <= img_y && img_y < ROW - BORDER_SIZE;
 }
 
+//根据跟踪点的状态转化矩阵
 void reduceVector(vector<cv::Point2f> &v, vector<uchar> status)
 {
     int j = 0;
@@ -136,6 +137,8 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
             if (status[i] && !inBorder(forw_pts[i]))
                 status[i] = 0;
 //根据跟踪上的点调整整体的结构，将下面这些结构全部重新调整
+//只保留后面跟上的点，前面帧中跟不上的就动态删除掉
+
         reduceVector(prev_pts, status);
         reduceVector(cur_pts, status);
         reduceVector(forw_pts, status);
@@ -174,7 +177,7 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
 
 //	    The function finds the most prominent corners in the image or 
 // 	    in the specified image region, as described in [170]
-	    Function calculates the corner quality measure at every source image pixel using the cornerMinEigenVal or cornerHarris .
+	    // Function calculates the corner quality measure at every source image pixel using the cornerMinEigenVal or cornerHarris .
 // Function performs a non-maximum suppression (the local maximums in 3 x 3 neighborhood are retained).
 // The corners with the minimal eigenvalue less than 𝚚𝚞𝚊𝚕𝚒𝚝𝚢𝙻𝚎𝚟𝚎𝚕⋅maxx,yqualityMeasureMap(x,y) are rejected.
 // The remaining corners are sorted by the quality measure in the descending order.
@@ -190,7 +193,7 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
 
         ROS_DEBUG("add feature begins");
         TicToc t_a;
-// 增加特征点	n_pts为0 的时候其实没得选只能加
+// 增加特征点	n_pts为0 的时候其实没得选只能加，要求满足的个数打不到，就只能加，达到个数就可以筛选
         addPoints();
         ROS_DEBUG("selectFeature costs: %fms", t_a.toc());
     }

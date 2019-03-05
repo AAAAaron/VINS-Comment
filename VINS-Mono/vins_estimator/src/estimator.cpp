@@ -254,6 +254,7 @@ bool Estimator::initialStructure()
     }
     // global sfm
     // 纯视觉初始化，对SlidingWindow中的图像帧和相机姿态求解sfm问题，这里解决的是关键帧的位姿和特征点坐标
+    //要注意的是这里的特征点是ｌｋ光流法定义的，除去效率的问题之外，光流法天然的就锁定了特征点
     Quaterniond Q[frame_count + 1];
     Vector3d T[frame_count + 1];
     map<int, Vector3d> sfm_tracked_points;

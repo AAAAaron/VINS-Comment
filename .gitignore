@@ -32,5 +32,9 @@
 *.app
 
 
-.vscode/
-.vscode/c_cpp_properties.json
+build
+vscode
+kdev4
+docker
+*.json
+.vscode
